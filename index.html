@@ -279,6 +279,8 @@
 
       const gravity = 0.54;
       const keys = {};
+      let cheatBuffer = '';
+      const cheatCode = 'killester';
       let muted = false;
       let audioCtx = null;
       let musicTimer = null;
@@ -489,6 +491,12 @@
         player.x = 90; player.y = 300; player.vx = 0; player.vy = 0; player.onGround = false;
       }
 
+      function teleportToSender() {
+        respawnPlayer();
+        popToast('Packet delivered! Teleporting back to sender...');
+      }
+
+
       function spawnPacket() {
         packet.x = world.packetSpawn.x;
         packet.y = world.packetSpawn.y;
@@ -636,6 +644,7 @@
           };
           sfx(1200, 0.16, 'triangle');
         } else {
+          teleportToSender();
           spawnPacket();
           ui.info.textContent = 'Packets can travel one by one and still rebuild the file.';
         }
@@ -817,6 +826,26 @@
         }, 320);
       }
 
+      function completeCurrentLevelViaCheat() {
+        if (!state.running) return;
+        const remaining = 3 - state.levelDelivered;
+        if (remaining <= 0) return;
+        state.levelDelivered = 3;
+        state.totalDelivered += remaining;
+        revealTile(state.totalDelivered);
+        popToast('Cheat accepted: transmission shortcut activated!');
+
+        if (state.levelIndex >= 2) {
+          state.running = false;
+          setTimeout(() => { endScreen.style.display = 'grid'; }, 300);
+          return;
+        }
+
+        state.levelIndex++;
+        state.lives = 3;
+        resetForLevel();
+      }
+
       function initGame() {
         state.levelIndex = 0;
         state.totalDelivered = 0;
@@ -852,6 +881,15 @@
       document.addEventListener('keydown', (e) => {
         const key = e.code === 'Space' ? 'Space' : e.key;
         keys[key] = true;
+
+        if (/^[a-z]$/i.test(e.key)) {
+          cheatBuffer = (cheatBuffer + e.key.toLowerCase()).slice(-cheatCode.length);
+          if (cheatBuffer === cheatCode) {
+            completeCurrentLevelViaCheat();
+            cheatBuffer = '';
+          }
+        }
+
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(key)) e.preventDefault();
       });
       document.addEventListener('keyup', (e) => {
