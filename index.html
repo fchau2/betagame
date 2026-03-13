@@ -151,6 +151,30 @@
     #overlay .modal { width: min(720px, 88vw); }
     #endScreen { display: none; }
     .small { font-size: 12px; color: #d8dfff; }
+
+    #puzzleBoard {
+      width: min(360px, 80vw);
+      margin: 8px auto;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      padding: 8px;
+      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(10,18,47,0.9), rgba(17,33,88,0.8));
+      border: 1px solid rgba(152,220,255,0.7);
+    }
+    .puzzle-tile {
+      aspect-ratio: 1;
+      border-radius: 10px;
+      border: 1px solid rgba(182,238,255,0.8);
+      box-shadow: 0 8px 14px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.25);
+      cursor: pointer;
+      background-size: 300% 300%;
+      transition: transform .15s ease, box-shadow .15s ease;
+    }
+    .puzzle-tile:hover { transform: translateY(-2px); }
+    .puzzle-tile.selected { box-shadow: 0 0 0 2px #8dffcb, 0 0 18px rgba(141,255,203,.55); }
+
   </style>
 </head>
 <body>
@@ -213,9 +237,11 @@
 
     <div id="endScreen">
       <div class="modal">
-        <h2>Message Delivered</h2>
-        <p>You delivered all 9 packets! You just simulated packet-based data transfer across a network: packets travel separately, survive obstacles, and are reassembled at the destination.</p>
-        <div id="endImage" style="max-width:260px;margin:12px auto;"></div>
+        <h2>Final Reassembly Puzzle</h2>
+        <p id="endSummary">All packets arrived. Reassemble the message by putting the 3×3 tiles in the correct order.</p>
+        <div id="puzzleBoard" aria-label="final reassembly puzzle board"></div>
+        <div id="endImage" style="max-width:280px;margin:12px auto;display:none;"></div>
+        <p id="celebrationText" style="display:none; text-align:center; font-weight:700; color:#9bffd9;">Message Delivered</p>
         <button id="replayBtn">Replay</button>
       </div>
     </div>
@@ -269,7 +295,9 @@
         deathCooldown: 0,
         cameraX: 0,
         popText: '',
-        popTime: 0
+        popTime: 0,
+        collectFlash: 0,
+        deliverFlash: 0
       };
 
       const world = {
@@ -288,6 +316,9 @@
 
       const player = { x: 100, y: 200, w: 34, h: 44, vx: 0, vy: 0, onGround: false, invuln: 0, facing: 1 };
       const packet = { x: 130, y: 396, w: 24, h: 24, active: true, number: 1, bob: 0 };
+      const particles = [];
+      const bgPackets = [];
+      const puzzleState = { order: [], selected: -1, solved: false, celebrate: 0 };
 
       const charGrid = document.getElementById('characterGrid');
       const startScreen = document.getElementById('startScreen');
@@ -297,6 +328,9 @@
       const overlayBtn = document.getElementById('overlayBtn');
       const endScreen = document.getElementById('endScreen');
       const endImage = document.getElementById('endImage');
+      const endSummary = document.getElementById('endSummary');
+      const puzzleBoard = document.getElementById('puzzleBoard');
+      const celebrationText = document.getElementById('celebrationText');
 
 
       function roundedRect(x, y, w, h, r = 10) {
@@ -310,8 +344,81 @@
         ctx.closePath();
       }
 
-      function lerpColor(a, b, t) {
-        return a + (b - a) * t;
+
+      function spawnParticles(x, y, color, count = 14, spread = 2.8) {
+        for (let i = 0; i < count; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const sp = 1 + Math.random() * spread;
+          particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1.2, life: 30 + Math.random() * 22, color, size: 2 + Math.random() * 2 });
+        }
+      }
+
+      function updateParticles() {
+        for (let i = particles.length - 1; i >= 0; i--) {
+          const p = particles[i];
+          p.x += p.vx; p.y += p.vy; p.vy += 0.06; p.life -= 1;
+          if (p.life <= 0) particles.splice(i, 1);
+        }
+      }
+
+      function drawParticles() {
+        const cam = state.cameraX;
+        particles.forEach(p => {
+          ctx.fillStyle = p.color;
+          ctx.globalAlpha = Math.max(0, p.life / 45);
+          ctx.beginPath(); ctx.arc(p.x - cam, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+        });
+        ctx.globalAlpha = 1;
+      }
+
+      function buildPuzzleBoard() {
+        const order = [...Array(9).keys()];
+        for (let i = order.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [order[i], order[j]] = [order[j], order[i]];
+        }
+        puzzleState.order = order;
+        puzzleState.selected = -1;
+        puzzleState.solved = false;
+        puzzleState.celebrate = 0;
+        renderPuzzleBoard();
+      }
+
+      function renderPuzzleBoard() {
+        puzzleBoard.innerHTML = '';
+        puzzleState.order.forEach((tileIndex, i) => {
+          const t = document.createElement('button');
+          t.className = 'puzzle-tile' + (puzzleState.selected === i ? ' selected' : '');
+          t.style.backgroundImage = `url(${document.querySelectorAll('.tile canvas')[tileIndex].toDataURL()})`;
+          t.style.backgroundSize = 'cover';
+          t.addEventListener('click', () => onPuzzleTileClick(i));
+          puzzleBoard.appendChild(t);
+        });
+      }
+
+      function onPuzzleTileClick(i) {
+        if (puzzleState.solved) return;
+        if (puzzleState.selected === -1) {
+          puzzleState.selected = i;
+          renderPuzzleBoard();
+          return;
+        }
+        const a = puzzleState.selected;
+        [puzzleState.order[a], puzzleState.order[i]] = [puzzleState.order[i], puzzleState.order[a]];
+        puzzleState.selected = -1;
+        renderPuzzleBoard();
+        if (puzzleState.order.every((v, idx) => v === idx)) {
+          onPuzzleSolved();
+        }
+      }
+
+      function onPuzzleSolved() {
+        puzzleState.solved = true;
+        puzzleState.celebrate = 180;
+        celebrationText.style.display = 'block';
+        endImage.style.display = 'block';
+        endSummary.textContent = 'Excellent work! Packets travelled separately across the network and were reassembled into the original message.';
+        for (let i = 0; i < 40; i++) spawnParticles(140 + Math.random() * 120, 120 + Math.random() * 120, ['#8dffcb','#72ddff','#ffd775','#ca8fff'][i % 4], 1, 4);
       }
 
       function createCharacterPicker() {
@@ -378,24 +485,29 @@
 
       function drawTileArt(c, idx) {
         c.clearRect(0, 0, 64, 64);
-        const gx = idx % 3;
-        const gy = Math.floor(idx / 3);
+        const tx = idx % 3;
+        const ty = Math.floor(idx / 3);
         const grad = c.createLinearGradient(0, 0, 64, 64);
-        grad.addColorStop(0, '#18307d');
-        grad.addColorStop(1, '#1a8dc2');
+        grad.addColorStop(0, '#1f2f82'); grad.addColorStop(1, '#1da6c9');
         c.fillStyle = grad;
         c.beginPath(); c.roundRect(2, 2, 60, 60, 12); c.fill();
 
-        c.strokeStyle = 'rgba(170,235,255,0.55)';
-        c.lineWidth = 2;
-        c.beginPath();
-        c.moveTo(8, 18 + gy * 2); c.lineTo(56, 18 + gy * 2);
-        c.moveTo(12 + gx * 2, 32); c.lineTo(52, 32);
-        c.moveTo(10, 45 - gy * 2); c.lineTo(50, 45 - gy * 2);
-        c.stroke();
-
-        c.fillStyle = '#8fffe0'; c.beginPath(); c.arc(14 + gx * 8, 18 + gy * 2, 3, 0, Math.PI * 2); c.fill();
-        c.fillStyle = '#ffd27b'; c.beginPath(); c.arc(48 - gx * 5, 32, 4, 0, Math.PI * 2); c.fill();
+        c.fillStyle = 'rgba(101,247,176,0.25)'; c.fillRect(8, 8, 48, 48);
+        // compose a larger scene across all tiles: robot + glowing monitor + packets
+        const ox = tx * 64, oy = ty * 64;
+        c.save();
+        c.translate(-ox, -oy);
+        c.fillStyle = '#81e9ff'; c.beginPath(); c.roundRect(78, 118, 36, 42, 14); c.fill(); // robot body
+        c.fillStyle = '#1b3d84'; c.beginPath(); c.roundRect(84, 128, 24, 12, 6); c.fill();
+        c.fillStyle = '#6cffef'; c.beginPath(); c.arc(91, 134, 2, 0, Math.PI * 2); c.fill(); c.beginPath(); c.arc(101, 134, 2, 0, Math.PI * 2); c.fill();
+        c.strokeStyle = '#7ed3ff'; c.lineWidth = 3; c.beginPath(); c.moveTo(96, 118); c.lineTo(96, 108); c.stroke(); c.fillStyle = '#ffd775'; c.beginPath(); c.arc(96, 106, 3, 0, Math.PI * 2); c.fill();
+        c.fillStyle = '#5bf3a8'; c.beginPath(); c.roundRect(118, 110, 58, 42, 8); c.fill(); // monitor
+        c.fillStyle = '#1d4f52'; c.beginPath(); c.roundRect(124, 116, 46, 28, 6); c.fill();
+        c.fillStyle = '#9affd9'; c.font = 'bold 11px Inter'; c.fillText('MSG', 136, 134);
+        for (let i = 0; i < 4; i++) { c.fillStyle = ['#72ddff','#ca8fff','#ffd775','#8dffcb'][i]; c.beginPath(); c.roundRect(48 + i*18, 88 - i*7, 10, 10, 3); c.fill(); }
+        c.strokeStyle = 'rgba(140,255,203,0.8)'; c.beginPath(); c.moveTo(56, 86); c.lineTo(126, 112); c.stroke();
+        for (let i = 0; i < 8; i++) { c.fillStyle = 'rgba(255,255,255,0.7)'; c.beginPath(); c.arc(48 + i*16, 72 + Math.sin(i)*4, 1.4, 0, Math.PI*2); c.fill(); }
+        c.restore();
       }
 
       function revealTile(count) {
@@ -408,10 +520,14 @@
           cv.style.width = '100%';
           const c = cv.getContext('2d');
           for (let i = 0; i < 9; i++) {
-            drawTileArt(c, i);
-            const sx = 0, sy = 0;
             c.drawImage(document.querySelectorAll('.tile canvas')[i], 0, 0, 64, 64, (i % 3) * 64, Math.floor(i / 3) * 64, 64, 64);
           }
+          c.fillStyle = 'rgba(20,32,90,0.4)';
+          c.fillRect(0, 130, 192, 62);
+          c.fillStyle = '#8dffcb';
+          c.font = 'bold 20px Inter';
+          c.fillText('MESSAGE', 42, 157);
+          c.fillText('DELIVERED', 40, 180);
           endImage.appendChild(cv);
         }
       }
@@ -554,6 +670,8 @@
         if (packet.active && rectsOverlap(player, packet)) {
           packet.active = false;
           state.carrying = packet.number;
+          state.collectFlash = 12;
+          spawnParticles(packet.x + 12, packet.y + 12, '#8dffcb', 18, 4);
           popToast(`Picked packet ${packet.number}/3`);
           sfx(620, 0.08, 'triangle');
         }
@@ -616,6 +734,8 @@
       function deliverPacket() {
         sfx(840, 0.1, 'square');
         sfx(990, 0.08, 'square');
+        state.deliverFlash = 20;
+        spawnParticles(world.destination.x + 24, world.destination.y + 30, '#ffd775', 26, 4.5);
         state.levelDelivered++;
         state.totalDelivered++;
         state.carrying = null;
@@ -625,7 +745,7 @@
         if (state.levelDelivered >= 3) {
           state.running = false;
           if (state.levelIndex === 2) {
-            setTimeout(() => { endScreen.style.display = 'grid'; }, 400);
+            setTimeout(() => { buildPuzzleBoard(); endScreen.style.display = 'grid'; }, 400);
             return;
           }
           overlayTitle.textContent = `Level ${state.levelIndex + 1} Complete`;
@@ -651,41 +771,45 @@
         const cam = state.cameraX;
         const t = performance.now() * 0.001;
         const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
-        sky.addColorStop(0, '#1a337d');
-        sky.addColorStop(0.55, '#132761');
-        sky.addColorStop(1, '#0b1945');
-        ctx.fillStyle = sky;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        sky.addColorStop(0, '#1a2f7b'); sky.addColorStop(.45, '#162966'); sky.addColorStop(1, '#0b1644');
+        ctx.fillStyle = sky; ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        for (let i = 0; i < 18; i++) {
-          const x = (i * 170 - cam * 0.25) % (canvas.width + 240);
-          const h = 120 + (i % 4) * 24;
-          const gx = ctx.createLinearGradient(x, 280, x, 280 + h);
-          gx.addColorStop(0, 'rgba(90,160,255,0.35)');
-          gx.addColorStop(1, 'rgba(38,76,170,0.16)');
-          ctx.fillStyle = gx;
-          roundedRect(x, 280, 95, h, 16);
-          ctx.fill();
+        // Layer 1 far background: towers, antennas, routers
+        for (let i = 0; i < 14; i++) {
+          const x = (i * 210 - cam * 0.18) % (canvas.width + 240);
+          const h = 110 + (i % 5) * 26;
+          ctx.fillStyle = 'rgba(84,127,227,0.22)';
+          roundedRect(x, 300, 92, h, 14); ctx.fill();
+          ctx.strokeStyle = 'rgba(124,201,255,0.35)'; ctx.beginPath(); ctx.moveTo(x + 46, 300); ctx.lineTo(x + 46, 285 - (i % 3) * 8); ctx.stroke();
+          ctx.fillStyle = (Math.floor(t * 3 + i) % 2 === 0) ? 'rgba(141,255,203,0.8)' : 'rgba(255,215,117,0.8)';
+          ctx.beginPath(); ctx.arc(x + 46, 282 - (i % 3) * 8, 2.8, 0, Math.PI * 2); ctx.fill();
         }
 
-        ctx.strokeStyle = 'rgba(90,214,255,0.3)';
-        ctx.lineWidth = 2;
-        for (let r = 0; r < 5; r++) {
-          const y = 85 + r * 36;
+        // Layer 2 mid: connected cables and moving packets
+        for (let r = 0; r < 4; r++) {
+          const y = 120 + r * 42;
+          ctx.strokeStyle = ['rgba(114,221,255,0.36)','rgba(202,143,255,0.28)','rgba(141,255,203,0.3)','rgba(255,215,117,0.26)'][r];
+          ctx.lineWidth = 2;
           ctx.beginPath();
-          for (let x = -60; x <= canvas.width + 60; x += 18) {
-            const wave = Math.sin((x + cam * 0.4) * 0.01 + r + t) * 6;
-            if (x === -60) ctx.moveTo(x, y + wave);
-            else ctx.lineTo(x, y + wave);
+          for (let x = -70; x <= canvas.width + 70; x += 24) {
+            const wave = Math.sin((x + cam * 0.5) * 0.012 + r + t * 1.2) * (6 + r);
+            if (x === -70) ctx.moveTo(x, y + wave); else ctx.lineTo(x, y + wave);
           }
           ctx.stroke();
+          for (let n = 0; n < 8; n++) {
+            const nx = (n * 180 + cam * 0.28 + t * 40 + r * 30) % (canvas.width + 120) - 30;
+            const ny = y + Math.sin((nx + cam) * 0.012 + r + t * 1.2) * (6 + r);
+            ctx.fillStyle = 'rgba(156,239,255,0.7)'; ctx.beginPath(); ctx.arc(nx, ny, 2.2, 0, Math.PI * 2); ctx.fill();
+            if (n % 3 === 0) { ctx.fillStyle = 'rgba(255,223,133,0.85)'; roundedRect(nx - 3, ny - 3, 6, 6, 2); ctx.fill(); }
+          }
         }
 
-        for (let i = 0; i < 35; i++) {
-          const px = ((i * 123 + t * 60 + cam * 0.15) % (canvas.width + 100)) - 40;
-          const py = 70 + (i * 47 % 160);
-          ctx.fillStyle = 'rgba(141, 255, 203, 0.5)';
-          ctx.beginPath(); ctx.arc(px, py, 2, 0, Math.PI * 2); ctx.fill();
+        // Layer 3 near particles/sparks
+        for (let i = 0; i < 65; i++) {
+          const px = ((i * 97 + t * (18 + (i % 7)) + cam * 0.42) % (canvas.width + 120)) - 40;
+          const py = 45 + (i * 53 % 220) + Math.sin(t * 1.3 + i) * 5;
+          ctx.fillStyle = ['rgba(141,255,203,0.55)','rgba(114,221,255,0.55)','rgba(202,143,255,0.45)','rgba(255,215,117,0.45)'][i % 4];
+          ctx.beginPath(); ctx.arc(px, py, 1.6 + (i % 3) * .4, 0, Math.PI * 2); ctx.fill();
         }
       }
 
@@ -799,6 +923,17 @@
           ctx.fillText(`${packet.number}/3`, px + 3, py + 16);
         }
 
+        if (state.collectFlash > 0) {
+          ctx.fillStyle = `rgba(141,255,203,${state.collectFlash/18})`;
+          ctx.fillRect(0,0,canvas.width,canvas.height);
+          state.collectFlash--;
+        }
+        if (state.deliverFlash > 0) {
+          ctx.fillStyle = `rgba(255,215,117,${state.deliverFlash/28})`;
+          ctx.fillRect(0,0,canvas.width,canvas.height);
+          state.deliverFlash--;
+        }
+
         world.malware.forEach(m => {
           const mx = m.x - cam;
           const phase = Math.sin(t * 5 + m.x * 0.03);
@@ -816,10 +951,12 @@
 
       function drawPlayer() {
         const x = player.x - state.cameraX;
-        const y = player.y;
+        const idle = Math.sin(performance.now() * 0.006 + player.x * 0.02) * 1.8;
+        const y = player.y + idle;
         const blink = player.invuln > 0 && Math.floor(player.invuln / 5) % 2 === 0;
         if (blink) return;
         const ch = state.selectedCharacter;
+        ctx.shadowBlur = 14; ctx.shadowColor = 'rgba(124,210,255,0.45)';
 
         if (ch.id === 'robot') {
           const g = ctx.createLinearGradient(x + 8, y, x + 30, y + 42);
@@ -848,6 +985,8 @@
             ctx.beginPath(); ctx.arc(x + 4 - i * 4, y + 24 + i * 2, 2.3 - i * 0.25, 0, Math.PI * 2); ctx.fill();
           }
         }
+
+        ctx.shadowBlur = 0;
 
         if (state.carrying) {
           const carryX = x + (player.facing > 0 ? 27 : -6);
@@ -888,7 +1027,9 @@
 
       function loop() {
         if (state.running) updatePlayer();
+        updateParticles();
         drawWorld();
+        drawParticles();
         drawPlayer();
         drawToast();
         updateUI();
@@ -929,7 +1070,7 @@
 
         if (state.levelIndex >= 2) {
           state.running = false;
-          setTimeout(() => { endScreen.style.display = 'grid'; }, 300);
+          setTimeout(() => { buildPuzzleBoard(); endScreen.style.display = 'grid'; }, 300);
           return;
         }
 
@@ -943,6 +1084,9 @@
         state.totalDelivered = 0;
         state.lives = 3;
         revealTile(0);
+        celebrationText.style.display = 'none';
+        endImage.style.display = 'none';
+        endSummary.textContent = 'All packets arrived. Reassemble the message by putting the 3×3 tiles in the correct order.';
         resetForLevel();
         state.running = true;
         ui.info.textContent = 'Move each packet through the network. Wait for firewall cooldown windows before crossing.';
