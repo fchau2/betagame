@@ -319,6 +319,8 @@
       const particles = [];
       const bgPackets = [];
       const puzzleState = { order: [], selected: -1, solved: false, celebrate: 0 };
+      let sourceTileCanvases = [];
+      let previewOrder = [...Array(9).keys()];
 
       const charGrid = document.getElementById('characterGrid');
       const startScreen = document.getElementById('startScreen');
@@ -372,25 +374,27 @@
       }
 
       function buildPuzzleBoard() {
-        const order = [...Array(9).keys()];
-        for (let i = order.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [order[i], order[j]] = [order[j], order[i]];
-        }
+        const order = randomNonSolvedOrder();
         puzzleState.order = order;
         puzzleState.selected = -1;
         puzzleState.solved = false;
         puzzleState.celebrate = 0;
+        celebrationText.style.display = 'none';
+        endImage.style.display = 'none';
+        puzzleBoard.style.display = 'grid';
         renderPuzzleBoard();
       }
 
       function renderPuzzleBoard() {
         puzzleBoard.innerHTML = '';
+        ensureSourceTileCanvases();
+        const tileCanvases = sourceTileCanvases;
         puzzleState.order.forEach((tileIndex, i) => {
           const t = document.createElement('button');
           t.className = 'puzzle-tile' + (puzzleState.selected === i ? ' selected' : '');
-          t.style.backgroundImage = `url(${document.querySelectorAll('.tile canvas')[tileIndex].toDataURL()})`;
+          t.style.backgroundImage = `url(${tileCanvases[tileIndex].toDataURL()})`;
           t.style.backgroundSize = 'cover';
+          t.setAttribute('aria-label', `Puzzle tile ${i + 1}`);
           t.addEventListener('click', () => onPuzzleTileClick(i));
           puzzleBoard.appendChild(t);
         });
@@ -415,9 +419,11 @@
       function onPuzzleSolved() {
         puzzleState.solved = true;
         puzzleState.celebrate = 180;
+        celebrationText.textContent = 'Reassembly complete: beach message restored correctly!';
         celebrationText.style.display = 'block';
         endImage.style.display = 'block';
-        endSummary.textContent = 'Excellent work! Packets travelled separately across the network and were reassembled into the original message.';
+        puzzleBoard.style.display = 'none';
+        endSummary.textContent = 'Excellent work! The packets arrived separately, you rebuilt them in the correct order, and the full image has now been restored.';
         for (let i = 0; i < 40; i++) spawnParticles(140 + Math.random() * 120, 120 + Math.random() * 120, ['#8dffcb','#72ddff','#ffd775','#ca8fff'][i % 4], 1, 4);
       }
 
@@ -468,7 +474,31 @@
         }
       }
 
+      function randomNonSolvedOrder() {
+        const order = [...Array(9).keys()];
+        do {
+          for (let i = order.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [order[i], order[j]] = [order[j], order[i]];
+          }
+        } while (order.every((v, idx) => v === idx));
+        return order;
+      }
+
+      function ensureSourceTileCanvases() {
+        if (sourceTileCanvases.length) return;
+        sourceTileCanvases = [];
+        for (let i = 0; i < 9; i++) {
+          const cv = document.createElement('canvas');
+          cv.width = 64; cv.height = 64;
+          drawTileArt(cv.getContext('2d'), i);
+          sourceTileCanvases.push(cv);
+        }
+      }
+
       function setupReassemblyGrid() {
+        ensureSourceTileCanvases();
+        previewOrder = randomNonSolvedOrder();
         const grid = document.getElementById('reassemblyGrid');
         grid.innerHTML = '';
         for (let i = 0; i < 9; i++) {
@@ -477,9 +507,9 @@
           const cv = document.createElement('canvas');
           cv.width = 64; cv.height = 64;
           cv.style.width = '100%'; cv.style.height = '100%';
+          cv.getContext('2d').drawImage(sourceTileCanvases[previewOrder[i]], 0, 0);
           tile.appendChild(cv);
           grid.appendChild(tile);
-          drawTileArt(cv.getContext('2d'), i);
         }
       }
 
@@ -487,49 +517,155 @@
         c.clearRect(0, 0, 64, 64);
         const tx = idx % 3;
         const ty = Math.floor(idx / 3);
-        const grad = c.createLinearGradient(0, 0, 64, 64);
-        grad.addColorStop(0, '#1f2f82'); grad.addColorStop(1, '#1da6c9');
-        c.fillStyle = grad;
-        c.beginPath(); c.roundRect(2, 2, 60, 60, 12); c.fill();
+        const ox = tx * 64;
+        const oy = ty * 64;
 
-        c.fillStyle = 'rgba(101,247,176,0.25)'; c.fillRect(8, 8, 48, 48);
-        // compose a larger scene across all tiles: robot + glowing monitor + packets
-        const ox = tx * 64, oy = ty * 64;
         c.save();
         c.translate(-ox, -oy);
-        c.fillStyle = '#81e9ff'; c.beginPath(); c.roundRect(78, 118, 36, 42, 14); c.fill(); // robot body
-        c.fillStyle = '#1b3d84'; c.beginPath(); c.roundRect(84, 128, 24, 12, 6); c.fill();
-        c.fillStyle = '#6cffef'; c.beginPath(); c.arc(91, 134, 2, 0, Math.PI * 2); c.fill(); c.beginPath(); c.arc(101, 134, 2, 0, Math.PI * 2); c.fill();
-        c.strokeStyle = '#7ed3ff'; c.lineWidth = 3; c.beginPath(); c.moveTo(96, 118); c.lineTo(96, 108); c.stroke(); c.fillStyle = '#ffd775'; c.beginPath(); c.arc(96, 106, 3, 0, Math.PI * 2); c.fill();
-        c.fillStyle = '#5bf3a8'; c.beginPath(); c.roundRect(118, 110, 58, 42, 8); c.fill(); // monitor
-        c.fillStyle = '#1d4f52'; c.beginPath(); c.roundRect(124, 116, 46, 28, 6); c.fill();
-        c.fillStyle = '#9affd9'; c.font = 'bold 11px Inter'; c.fillText('MSG', 136, 134);
-        for (let i = 0; i < 4; i++) { c.fillStyle = ['#72ddff','#ca8fff','#ffd775','#8dffcb'][i]; c.beginPath(); c.roundRect(48 + i*18, 88 - i*7, 10, 10, 3); c.fill(); }
-        c.strokeStyle = 'rgba(140,255,203,0.8)'; c.beginPath(); c.moveTo(56, 86); c.lineTo(126, 112); c.stroke();
-        for (let i = 0; i < 8; i++) { c.fillStyle = 'rgba(255,255,255,0.7)'; c.beginPath(); c.arc(48 + i*16, 72 + Math.sin(i)*4, 1.4, 0, Math.PI*2); c.fill(); }
+
+        const sky = c.createLinearGradient(0, 0, 0, 192);
+        sky.addColorStop(0, '#86d8ff');
+        sky.addColorStop(0.42, '#ffe7b7');
+        sky.addColorStop(0.68, '#71c6ff');
+        sky.addColorStop(1, '#1b7cc4');
+        c.fillStyle = sky;
+        c.fillRect(0, 0, 192, 192);
+
+        c.fillStyle = 'rgba(255,255,255,0.55)';
+        c.beginPath(); c.arc(154, 32, 20, 0, Math.PI * 2); c.fill();
+
+        c.fillStyle = 'rgba(255,255,255,0.35)';
+        [[35,34,18],[56,30,15],[79,34,17],[118,52,16],[137,48,14],[156,53,17]].forEach(cl => {
+          c.beginPath(); c.arc(cl[0], cl[1], cl[2], 0, Math.PI * 2); c.fill();
+        });
+
+        c.fillStyle = '#f4d398';
+        c.fillRect(0, 108, 192, 84);
+
+        const sea = c.createLinearGradient(0, 78, 0, 132);
+        sea.addColorStop(0, '#3dd3ff');
+        sea.addColorStop(0.6, '#1aa7e8');
+        sea.addColorStop(1, '#1b77c7');
+        c.fillStyle = sea;
+        c.fillRect(0, 82, 192, 48);
+
+        for (let i = 0; i < 4; i++) {
+          c.strokeStyle = 'rgba(255,255,255,0.6)';
+          c.lineWidth = 2;
+          c.beginPath();
+          const baseY = 89 + i * 9;
+          for (let x = 0; x <= 192; x += 12) {
+            const y = baseY + Math.sin((x * 0.09) + i * 0.8) * 2.2;
+            if (x === 0) c.moveTo(x, y); else c.lineTo(x, y);
+          }
+          c.stroke();
+        }
+
+        c.strokeStyle = 'rgba(230,196,129,0.9)';
+        c.lineWidth = 2;
+        c.beginPath();
+        for (let x = 0; x <= 192; x += 10) {
+          const y = 108 + Math.sin(x * 0.08) * 2;
+          if (x === 0) c.moveTo(x, y); else c.lineTo(x, y);
+        }
+        c.stroke();
+
+        c.fillStyle = '#89e9ff';
+        c.beginPath(); c.roundRect(34, 88, 34, 46, 14); c.fill();
+        c.fillStyle = '#193f77';
+        c.beginPath(); c.roundRect(41, 101, 20, 12, 6); c.fill();
+        c.fillStyle = '#d9fbff';
+        c.beginPath(); c.arc(48, 107, 2.2, 0, Math.PI * 2); c.fill();
+        c.beginPath(); c.arc(54, 107, 2.2, 0, Math.PI * 2); c.fill();
+        c.strokeStyle = '#59c8ff'; c.lineWidth = 3;
+        c.beginPath(); c.moveTo(51, 88); c.lineTo(51, 79); c.stroke();
+        c.fillStyle = '#ffd56f';
+        c.beginPath(); c.arc(51, 76, 3.4, 0, Math.PI * 2); c.fill();
+        c.strokeStyle = '#89e9ff'; c.lineWidth = 3;
+        c.beginPath(); c.moveTo(39, 131); c.lineTo(33, 145); c.moveTo(63, 131); c.lineTo(70, 145); c.stroke();
+        c.beginPath(); c.moveTo(42, 145); c.lineTo(42, 155); c.moveTo(60, 145); c.lineTo(60, 155); c.stroke();
+        c.fillStyle = '#ff7ea8';
+        c.beginPath(); c.roundRect(21, 150, 48, 14, 7); c.fill();
+        c.fillStyle = '#ffd7ec';
+        for (let i = 0; i < 4; i++) c.fillRect(25 + i * 11, 150, 5, 14);
+
+        c.fillStyle = '#bff7b6';
+        c.beginPath(); c.roundRect(116, 94, 34, 44, 14); c.fill();
+        c.fillStyle = '#23516f';
+        c.beginPath(); c.roundRect(123, 106, 20, 11, 6); c.fill();
+        c.fillStyle = '#eafff3';
+        c.beginPath(); c.arc(130, 111, 2.2, 0, Math.PI * 2); c.fill();
+        c.beginPath(); c.arc(136, 111, 2.2, 0, Math.PI * 2); c.fill();
+        c.strokeStyle = '#9df0cf'; c.lineWidth = 3;
+        c.beginPath(); c.moveTo(133, 94); c.lineTo(133, 84); c.stroke();
+        c.fillStyle = '#ffb56b';
+        c.beginPath(); c.arc(133, 81, 3.4, 0, Math.PI * 2); c.fill();
+        c.strokeStyle = '#bff7b6'; c.lineWidth = 3;
+        c.beginPath(); c.moveTo(120, 136); c.lineTo(112, 148); c.moveTo(145, 136); c.lineTo(154, 146); c.stroke();
+        c.beginPath(); c.moveTo(124, 148); c.lineTo(124, 157); c.moveTo(140, 148); c.lineTo(140, 157); c.stroke();
+
+        c.fillStyle = '#e9bb66';
+        c.beginPath(); c.moveTo(138, 151); c.lineTo(149, 136); c.lineTo(156, 151); c.closePath(); c.fill();
+        c.fillStyle = '#f4cf7d';
+        c.beginPath(); c.roundRect(149, 142, 20, 18, 4); c.fill();
+        c.fillStyle = '#dd9a38';
+        c.fillRect(154, 136, 3, 7);
+
+        c.fillStyle = '#ff6b8d';
+        c.beginPath(); c.moveTo(86, 110); c.arc(86, 110, 18, Math.PI, 0); c.closePath(); c.fill();
+        c.fillStyle = '#ffd56a';
+        c.beginPath(); c.moveTo(86, 110); c.arc(86, 110, 12, Math.PI, 0); c.closePath(); c.fill();
+        c.strokeStyle = '#7a4f33'; c.lineWidth = 3;
+        c.beginPath(); c.moveTo(86, 110); c.lineTo(86, 152); c.stroke();
+
+        c.fillStyle = '#7cdaff';
+        c.beginPath(); c.roundRect(79, 153, 16, 9, 4); c.fill();
+        c.fillStyle = '#6cecb3';
+        c.beginPath(); c.roundRect(95, 152, 13, 10, 4); c.fill();
+
+        const accents = [['#ca8fff',100,58],['#72ddff',117,49],['#ffd775',130,59],['#8dffcb',145,45]];
+        accents.forEach(([col,x,y]) => {
+          c.fillStyle = col;
+          c.beginPath(); c.roundRect(x, y, 10, 10, 3); c.fill();
+          c.strokeStyle = 'rgba(255,255,255,0.45)';
+          c.beginPath(); c.moveTo(x + 5, y + 10); c.lineTo(84, 100); c.stroke();
+        });
+
+        for (let i = 0; i < 14; i++) {
+          c.fillStyle = 'rgba(255,255,255,0.58)';
+          c.beginPath();
+          c.arc(14 + i * 12, 70 + Math.sin(i * 0.7) * 4, 1.3 + (i % 2) * 0.4, 0, Math.PI * 2);
+          c.fill();
+        }
+
+        c.fillStyle = 'rgba(17,34,96,0.12)';
+        c.beginPath(); c.roundRect(4, 4, 184, 184, 18); c.fill();
+
         c.restore();
+
+        c.strokeStyle = 'rgba(153,234,255,0.7)';
+        c.lineWidth = 1.2;
+        c.beginPath(); c.roundRect(2, 2, 60, 60, 12); c.stroke();
       }
 
       function revealTile(count) {
         const tiles = document.querySelectorAll('.tile');
         tiles.forEach((t, i) => t.classList.toggle('revealed', i < count));
+
+        endImage.innerHTML = '';
+        const cv = document.createElement('canvas');
+        cv.width = 192; cv.height = 192;
+        cv.style.width = '100%';
+        const c = cv.getContext('2d');
+
         if (count >= 9) {
-          endImage.innerHTML = '';
-          const cv = document.createElement('canvas');
-          cv.width = 192; cv.height = 192;
-          cv.style.width = '100%';
-          const c = cv.getContext('2d');
           for (let i = 0; i < 9; i++) {
-            c.drawImage(document.querySelectorAll('.tile canvas')[i], 0, 0, 64, 64, (i % 3) * 64, Math.floor(i / 3) * 64, 64, 64);
+            c.drawImage(sourceTileCanvases[i], 0, 0, 64, 64, (i % 3) * 64, Math.floor(i / 3) * 64, 64, 64);
           }
-          c.fillStyle = 'rgba(20,32,90,0.4)';
-          c.fillRect(0, 130, 192, 62);
-          c.fillStyle = '#8dffcb';
-          c.font = 'bold 20px Inter';
-          c.fillText('MESSAGE', 42, 157);
-          c.fillText('DELIVERED', 40, 180);
-          endImage.appendChild(cv);
+          c.fillStyle = 'rgba(255,255,255,0.16)';
+          c.fillRect(0, 0, 192, 192);
         }
+        endImage.appendChild(cv);
       }
 
       function levelData(index) {
@@ -745,7 +881,7 @@
         if (state.levelDelivered >= 3) {
           state.running = false;
           if (state.levelIndex === 2) {
-            setTimeout(() => { buildPuzzleBoard(); endScreen.style.display = 'grid'; }, 400);
+            setTimeout(() => { buildPuzzleBoard(); puzzleBoard.style.display = 'grid'; endScreen.style.display = 'grid'; }, 400);
             return;
           }
           overlayTitle.textContent = `Level ${state.levelIndex + 1} Complete`;
@@ -1070,7 +1206,7 @@
 
         if (state.levelIndex >= 2) {
           state.running = false;
-          setTimeout(() => { buildPuzzleBoard(); endScreen.style.display = 'grid'; }, 300);
+          setTimeout(() => { buildPuzzleBoard(); puzzleBoard.style.display = 'grid'; endScreen.style.display = 'grid'; }, 300);
           return;
         }
 
@@ -1086,6 +1222,7 @@
         revealTile(0);
         celebrationText.style.display = 'none';
         endImage.style.display = 'none';
+        puzzleBoard.style.display = 'grid';
         endSummary.textContent = 'All packets arrived. Reassemble the message by putting the 3×3 tiles in the correct order.';
         resetForLevel();
         state.running = true;
