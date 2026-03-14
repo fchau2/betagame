@@ -274,7 +274,7 @@
       const characters = [
         { id: 'robot', name: 'Robot Courier', body: '#8fe9ff', accent: '#1f8fff' },
         { id: 'engineer', name: 'Network Engineer', body: '#ffd17a', accent: '#ff6f6f' },
-        { id: 'ai', name: 'Cute AI Bot', body: '#c2ffae', accent: '#8f5cff' }
+        { id: 'drone', name: 'Packet Drone', body: '#9de3ff', accent: '#4aa0ff' }
       ];
 
       const eduMessages = [
@@ -466,11 +466,23 @@
           c.fillStyle = '#2b4f9f'; c.beginPath(); c.roundRect(37, 30, 8, 14, 4); c.fill();
           c.fillStyle = '#8fe9ff'; c.beginPath(); c.roundRect(20, 31, 8, 6, 2); c.fill();
         } else {
-          const g = c.createRadialGradient(28, 27, 4, 28, 27, 16);
-          g.addColorStop(0, '#e7fff8'); g.addColorStop(1, '#8d7cff');
-          c.fillStyle = g; c.beginPath(); c.arc(28, 27, 15, 0, Math.PI * 2); c.fill();
-          c.fillStyle = '#203a7a'; c.beginPath(); c.arc(23, 26, 2.2, 0, Math.PI * 2); c.fill(); c.beginPath(); c.arc(33, 26, 2.2, 0, Math.PI * 2); c.fill();
-          c.strokeStyle = 'rgba(160,255,227,0.65)'; c.beginPath(); c.arc(28, 27, 20, 0, Math.PI * 2); c.stroke();
+          c.fillStyle = '#b9ebff';
+          c.beginPath(); c.arc(18, 16, 5, 0, Math.PI * 2); c.fill();
+          c.beginPath(); c.arc(38, 16, 5, 0, Math.PI * 2); c.fill();
+          c.strokeStyle = 'rgba(185,235,255,0.7)'; c.lineWidth = 2;
+          c.beginPath(); c.moveTo(18, 16); c.lineTo(23, 21); c.moveTo(38, 16); c.lineTo(33, 21); c.stroke();
+
+          const shell = c.createLinearGradient(16, 20, 40, 38);
+          shell.addColorStop(0, '#d6f5ff'); shell.addColorStop(1, '#63a8e8');
+          c.fillStyle = shell; c.beginPath(); c.roundRect(16, 20, 24, 16, 8); c.fill();
+
+          c.fillStyle = '#33caff';
+          c.beginPath(); c.arc(24, 28, 2.4, 0, Math.PI * 2); c.fill();
+          c.beginPath(); c.arc(32, 28, 2.4, 0, Math.PI * 2); c.fill();
+
+          c.strokeStyle = '#7fc4ff'; c.beginPath(); c.moveTo(28, 36); c.lineTo(28, 41); c.stroke();
+          c.fillStyle = '#234687'; c.beginPath(); c.roundRect(20, 41, 16, 8, 3); c.fill();
+          c.fillStyle = '#a6ecff'; c.font = 'bold 6px Inter'; c.fillText('PKT', 22, 47);
         }
       }
 
@@ -1112,14 +1124,23 @@
           ctx.fillStyle = '#95ebff'; roundedRect(x + 11, y + 23, 8, 6, 2); ctx.fill();
           ctx.fillStyle = '#e7f5ff'; roundedRect(x + 8, y + 34, 8, 10, 4); ctx.fill(); roundedRect(x + 20, y + 34, 8, 10, 4); ctx.fill();
         } else {
-          const orb = ctx.createRadialGradient(x + 17, y + 18, 3, x + 17, y + 18, 17);
-          orb.addColorStop(0, '#ffffff'); orb.addColorStop(1, '#8f86ff');
-          ctx.fillStyle = orb; ctx.beginPath(); ctx.arc(x + 17, y + 18, 14, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = '#243d7a'; ctx.beginPath(); ctx.arc(x + 13, y + 16, 2, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(x + 21, y + 16, 2, 0, Math.PI * 2); ctx.fill();
-          for (let i = 0; i < 5; i++) {
-            ctx.fillStyle = `rgba(141,255,203,${0.5 - i * 0.08})`;
-            ctx.beginPath(); ctx.arc(x + 4 - i * 4, y + 24 + i * 2, 2.3 - i * 0.25, 0, Math.PI * 2); ctx.fill();
-          }
+          ctx.fillStyle = '#b9ecff';
+          ctx.beginPath(); ctx.arc(x + 10, y + 8, 4, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(x + 26, y + 8, 4, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = 'rgba(183,238,255,0.7)'; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(x + 10, y + 8); ctx.lineTo(x + 14, y + 14); ctx.moveTo(x + 26, y + 8); ctx.lineTo(x + 22, y + 14); ctx.stroke();
+
+          const shell = ctx.createLinearGradient(x + 8, y + 13, x + 28, y + 30);
+          shell.addColorStop(0, '#dff8ff'); shell.addColorStop(1, '#5da9e8');
+          ctx.fillStyle = shell; roundedRect(x + 8, y + 13, 20, 15, 8); ctx.fill();
+
+          ctx.fillStyle = '#33ccff';
+          ctx.beginPath(); ctx.arc(x + 15, y + 21, 2, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(x + 21, y + 21, 2, 0, Math.PI * 2); ctx.fill();
+
+          ctx.strokeStyle = '#7fc4ff'; ctx.beginPath(); ctx.moveTo(x + 18, y + 28); ctx.lineTo(x + 18, y + 33); ctx.stroke();
+          ctx.fillStyle = '#244788'; roundedRect(x + 12, y + 33, 12, 10, 3); ctx.fill();
+          ctx.fillStyle = '#a7eeff'; ctx.font = 'bold 7px Inter'; ctx.fillText('PKT', x + 13, y + 40);
         }
 
         ctx.shadowBlur = 0;
